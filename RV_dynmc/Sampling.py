@@ -35,8 +35,8 @@ class Sampling:
         for inst in self.insts:
             if inst.name == instrument:
                 inst.add_data(times,vrad,svrad,units)
-          
-    def define_priors(self):
+                
+    def load_default_priors(self):
         
         self.priors.append(prior_none('M0'))
         for i in range(self.n_orbits):
@@ -46,11 +46,11 @@ class Sampling:
         for i in range(self.n_orbits):
             self.priors.append(prior_none('e'+str(i+1)))
         for i in range(self.n_orbits):
-            self.priors.append(prior_none('w'+str(i+1)))
+            self.priors.append(prior_uniform('w'+str(i+1),0,2*np.pi))
         for i in range(self.n_orbits):
-            self.priors.append(prior_none('W'+str(i+1)))
+            self.priors.append(prior_uniform('W'+str(i+1),-np.pi,np.pi))
         for i in range(self.n_orbits):
-            self.priors.append(prior_none('f'+str(i+1)))
+            self.priors.append(prior_uniform('f'+str(i+1),0,2*np.pi))
         for i in range(self.n_orbits):
             self.priors.append(prior_Gaussian('inc'+str(i+1),0,0.01))
             
@@ -59,6 +59,19 @@ class Sampling:
                 self.priors.append(prior_none('vsys'+str(i)+','+str(j)))
             for j in range(self.n_lines):
                 self.priors.append(prior_none('jit'+str(i)+','+str(j)))
+                
+    def define_prior(self,index,name,dist,a=0,b=1):
+        
+        if dist=='none':
+            self.priors[index] = prior_none(name)
+        elif dist in ['uniform','Uniform','U','flat','Flat']:
+            self.priors[index] = prior_uniform(name,a,b)
+        elif dist in ['loguniform','logUniform','LU','Loguniform','LogUniform']:
+            self.priors[index] = prior_loguniform(name,a,b)
+        elif dist in ['Gaussian','gaussian','Normal','normal','N']:
+            self.priors[index] = prior_uniform(name,a,b)
+        else:
+            raise ValueError('Prior distribution type not found, use one of: none, uniform, loguniform, gaussian')
                 
     def log_like(self,theta):
         '''
@@ -70,7 +83,6 @@ class Sampling:
         '''
         logL = 0
             
-        # Note that you have to separate the vsys and jitter from theta
         model_params = np.array(theta)
 
         M0 = model_params[0]
@@ -97,9 +109,9 @@ class Sampling:
         for i,P in enumerate(Ps):
             if P<=0:
                 physical = False
-        for i,inc in enumerate(incs):
-            if abs(inc) > 0.1:
-                physical = False
+        # for i,inc in enumerate(incs):
+        #     if abs(inc) > 0.1:
+        #         physical = False
                 
         if physical:
             for i,inst in enumerate(self.insts):
@@ -115,19 +127,12 @@ class Sampling:
                     rvs = dat.vrad
                     errs = dat.svrad
                     
-                    # model = modelfunc(model_param, times)
-                    
-                    # Compute increased (squared) error
-                    
-                    
                     vsys,jitter = model_params[num_orb_par + num_dat_par*i + j], model_params[num_orb_par + num_dat_par*i + self.n_lines + j]
-                    
                     
                     error = errs**2 + jitter**2
         
                     # Compute residuals to model
                     res = (rvs - model_rvs[j] - vsys)
-                    # print(np.sqrt(sum(res**2)/len(res)))
                     
                     logL += np.sum(st.norm(scale=np.sqrt(error)).logpdf(res))
         else:
@@ -137,14 +142,7 @@ class Sampling:
         
     def sim_rvs(self,M0,Ms,Ps,es,ws,Ws,fs,incs,t0,times,body=0):
         
-        sim = rebound.Simulation()
-        sim.units = ('days', 'AU', 'Msun')
-        
-        sim.add(m=M0)
-        for i,m in enumerate(Ms): 
-            sim.add(m=m,P=Ps[i],e=es[i],omega=ws[i],Omega=Ws[i],f=fs[i],inc=incs[i])
-        
-        sim.move_to_com()
+        sim = self.sim_setup(M0,Ms,Ps,es,ws,Ws,fs,incs)
         
         Time = times - t0
         
@@ -158,7 +156,19 @@ class Sampling:
             RVs2.append(vel2)
             
         return [RVs,RVs2]
-
+    
+    def sim_setup(self,M0,Ms,Ps,es,ws,Ws,fs,incs):
+        
+        sim = rebound.Simulation()
+        sim.units = ('days', 'AU', 'Msun')
+        
+        sim.add(m=M0)
+        for i,m in enumerate(Ms): 
+            sim.add(m=m,P=Ps[i],e=es[i],omega=ws[i],Omega=Ws[i],f=fs[i],inc=incs[i])
+        
+        sim.move_to_com()
+        
+        return sim
 
     def log_prior(self,theta):
         
@@ -184,7 +194,6 @@ class Sampling:
             self.t0=t0
             
         if prior:
-            self.define_priors()
             sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_post)
         else:
             sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_like)
