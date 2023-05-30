@@ -160,18 +160,21 @@ class RV_dynmc:
         
         sam = self.Sampling.run_emcee(self.chains, self.steps, self.x0,prior=prior)
         
-        self.sample_analysis = Samples_analysis(self.colnames, sam)
+        self.sample_analysis = Samples_analysis(self.colnames, sam,self.chains,self.Sampling)
         
         return self.sample_analysis
 
 class Samples_analysis:
     
-    def __init__(self,names,sampler,n_chains):
+    def __init__(self,names,sampler,n_chains,Sampling):
         self.colnames = names
         self.sampler = sampler
         self.n_chains = n_chains
+        self.Sampling = Sampling
         self.samples = self.sampler.get_chains()
         self.chains = list(np.linspace(0,self.n_chains-1,self.n_chains,dtype=int))
+        self.discard=0
+        self.thin=1
         
     def pop_chains(self,indices):
         for ind in indices:
@@ -180,9 +183,15 @@ class Samples_analysis:
     def restore_chains(self):
         self.chains = list(np.linspace(0,self.n_chains-1,self.n_chains,dtype=int))
         
-    def plot_logP(self,evolve=True,burnin=0,thin=1):
         
-        y = self.samples.get_log_prob(discard=burnin,thin=thin)
+    def plot_logP(self,evolve=True,discard=None,thin=None):
+        
+        if discard==None:
+            discard = self.discard
+        if thin==None:
+            thin = self.thin
+        
+        y = self.samples.get_log_prob(discard=discard,thin=thin)
         
         fig = plt.figure(figsize=(12, 6))
         ax = fig.add_subplot(111)
@@ -194,8 +203,30 @@ class Samples_analysis:
         ax.set_xlabel('Iteration', fontsize=16)
         ax.set_ylabel('logP', fontsize=16)
         
+    def choose_random(self):
         
+        sams = self.sampler.get_chains(discard=self.discard,thin=self.thin)
         
+        chain = random.sample(self.chains,1)[0]
+        
+        sam = random.sample(sams[:,chain,:], 1)[0]
     
+        return sam
         
+    def random_subsample(self,num):
         
+        sams = []
+        for i in range(num):
+            sams.append(self.choose_random())
+            
+        return sams
+    
+    def sims_subsample(self,samples):
+        
+        sims = []
+        for theta in samples:
+            M0,Ms,Ps,es,ws,Ws,fs,incs = self.Sampling.sim_params_from_theta()
+            sim = self.Sampling.sim_setup(M0, Ms, Ps, es, ws, Ws, fs, incs)
+            sims.append(sim)
+        
+        return sims

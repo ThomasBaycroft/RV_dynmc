@@ -73,6 +73,24 @@ class Sampling:
         else:
             raise ValueError('Prior distribution type not found, use one of: none, uniform, loguniform, gaussian')
                 
+    def sim_params_from_theta(self,theta):
+        
+        model_params = np.array(theta)
+
+        M0 = model_params[0]
+        Ms, Ps, es, ws, Ws, fs, incs = [], [], [], [], [], [], []
+        for i in range(self.n_orbits):
+            Ms.append(model_params[1+i])
+            Ps.append(model_params[1+self.n_orbits+i])
+            es.append(model_params[1+self.n_orbits*2+i])
+            ws.append(model_params[1+self.n_orbits*3+i])
+            Ws.append(model_params[1+self.n_orbits*4+i])
+            fs.append(model_params[1+self.n_orbits*5+i])
+            incs.append(model_params[1+self.n_orbits*6+i])
+            
+        return M0,Ms,Ps,es,ws,Ws,fs,incs
+        
+    
     def log_like(self,theta):
         '''
         theta: {orbit parameters}[M0,M1-Mn,P1-Pn,e1-en,w1-wn,W1-Wn,f1-fn,inc1-incn] + {data parameters}[vsys1-k,jit1-k](k the number of lines)(for each instrument)
