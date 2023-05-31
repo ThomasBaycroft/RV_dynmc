@@ -7,7 +7,6 @@ Created on Mon May 29 14:00:45 2023
 """
 
 from . import Sampling
-import pandas as pd
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,7 +19,8 @@ class RV_dynmc:
         self.insts = insts
         self.n_insts = len(insts)
         self.n_lines = n_lines
-        self.chains
+        self.n_chains = chains
+        self.n_steps = steps
         self.ndim = 1 + 7*self.n_orbits + 2*self.n_lines*self.n_insts
         
         self.Sampling = Sampling.Sampling(n_orbits,insts,n_lines)
@@ -64,7 +64,7 @@ class RV_dynmc:
                 ind = self.colnames.index(name)
             except ValueError:
                 raise ValueError('Parameter '+name+' is not valid, you can see the names of the parameters with RV_dynmc.colnames')
-                
+            print(name,dist,a,b)
             self.Sampling.define_prior(ind, name, dist,a,b)
         
         
@@ -79,10 +79,10 @@ class RV_dynmc:
             for j in range(self.n_lines):
                 self.Sampling.add_datafile(inst, datas[i]['bjd'], datas[i]['vrad'+str(j+1)], datas[i]['svrad'+str(j+1)], units)
 
-    def x0_from_kima(self,posts,num,binary=True,precessing=False):
+    def x0_from_kima(self,posts,binary=True,precessing=False):
         
         x0 = []
-        indices = random.sample(list(posts.index),self.chains)
+        indices = random.sample(list(posts.index),self.n_chains)
         for k,ind in enumerate(indices):
             x0k = []
             if binary:
@@ -154,13 +154,13 @@ class RV_dynmc:
     
     def x0_from_values(self,mean,sigma):
     
-        self.x0 = np.array(mean) + np.random.randn(self.chains, self.ndim)*sigma
+        self.x0 = np.array(mean) + np.random.randn(self.n_chains, self.ndim)*sigma
         
     def run(self,prior=False):
         
-        sam = self.Sampling.run_emcee(self.chains, self.steps, self.x0,prior=prior)
+        sam = self.Sampling.run_emcee(self.n_chains, self.steps, self.x0,prior=prior)
         
-        self.sample_analysis = Samples_analysis(self.colnames, sam,self.chains,self.Sampling)
+        self.sample_analysis = Samples_analysis(self.colnames, sam,self.n_chains,self.Sampling)
         
         return self.sample_analysis
 

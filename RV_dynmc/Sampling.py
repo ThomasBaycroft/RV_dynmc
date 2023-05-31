@@ -52,7 +52,7 @@ class Sampling:
         for i in range(self.n_orbits):
             self.priors.append(prior_uniform('f'+str(i+1),0,2*np.pi))
         for i in range(self.n_orbits):
-            self.priors.append(prior_Gaussian('inc'+str(i+1),0,0.01))
+            self.priors.append(prior_gaussian('inc'+str(i+1),np.pi/2,0.01))
             
         for i in range(self.n_insts):
             for j in range(self.n_lines):
@@ -69,7 +69,7 @@ class Sampling:
         elif dist in ['loguniform','logUniform','LU','Loguniform','LogUniform']:
             self.priors[index] = prior_loguniform(name,a,b)
         elif dist in ['Gaussian','gaussian','Normal','normal','N']:
-            self.priors[index] = prior_uniform(name,a,b)
+            self.priors[index] = prior_gaussian(name,a,b)
         else:
             raise ValueError('Prior distribution type not found, use one of: none, uniform, loguniform, gaussian')
                 
@@ -168,9 +168,9 @@ class Sampling:
         RVs2 = []
         for t in Time:
             sim.integrate(t)                
-            vel = -sim.particles[0].vy*(1.496*10**11)/(24*3600)
+            vel = -sim.particles[0].vz*(1.496*10**11)/(24*3600)
             RVs.append(vel)
-            vel2 = -sim.particles[1].vy*(1.496*10**11)/(24*3600)
+            vel2 = -sim.particles[1].vz*(1.496*10**11)/(24*3600)
             RVs2.append(vel2)
             
         return [RVs,RVs2]
@@ -227,7 +227,7 @@ class prior_none:
     def logp(self,value):
         return 0
    
-class prior_Gaussian:
+class prior_gaussian:
     def __init__(self,name,mu,sig):
         self.name = name
         self.mu = mu
