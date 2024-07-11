@@ -5,3 +5,12 @@ build-backend = "setuptools.build_meta"  # the function to use to build the pack
 [project]
 name = "RV_dynmc"
 version = "0.0.1"
+
+dependencies = [
+	"numpy",
+	"scipy",
+	"pandas",
+	"emcee",
+	"rebound",
+	"matplotlib",
+]

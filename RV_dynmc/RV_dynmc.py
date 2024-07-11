@@ -14,6 +14,15 @@ import matplotlib.pyplot as plt
 class RV_dynmc:
     
     def __init__(self,n_orbits,n_lines,insts,chains,steps):
+        '''
+        Initialise with:
+            n_orbits: int; number of orbits being included in the fit
+            n_lines: int; number of stars with RV time-series (1 for a single star or SB1)
+            insts: list of strings; names of the instruments used for RV data collection
+            chains: int; number of MCMC cahins
+            steps: number of steps to run MCMC for
+        '''
+        
         
         self.n_orbits = n_orbits
         self.insts = insts
@@ -49,9 +58,9 @@ class RV_dynmc:
         
         for j in range(self.n_insts):
             for i in range(self.n_lines):
-                names.append('vsys'+str(i)+'_'+self.insts[j])
+                names.append('vsys'+str(i+1)+'_'+self.insts[j])
             for i in range(self.n_lines):    
-                names.append('jit'+str(i)+'_'+self.insts[j])
+                names.append('jit'+str(i+1)+'_'+self.insts[j])
                 
         self.colnames = names
         
@@ -64,7 +73,6 @@ class RV_dynmc:
                 ind = self.colnames.index(name)
             except ValueError:
                 raise ValueError('Parameter '+name+' is not valid, you can see the names of the parameters with RV_dynmc.colnames')
-            print(name,dist,a,b)
             self.Sampling.define_prior(ind, name, dist,a,b)
         
         
@@ -76,8 +84,11 @@ class RV_dynmc:
         '''
         
         for i,inst in enumerate(insts):
-            for j in range(self.n_lines):
-                self.Sampling.add_datafile(inst, datas[i]['bjd'], datas[i]['vrad'+str(j+1)], datas[i]['svrad'+str(j+1)], units)
+            if self.n_lines==1:
+                self.Sampling.add_datafile(inst, datas[i]['bjd'], datas[i]['vrad'], datas[i]['svrad'], units[i])
+            else:
+                for j in range(self.n_lines):
+                    self.Sampling.add_datafile(inst, datas[i]['bjd'], datas[i]['vrad'+str(j+1)], datas[i]['svrad'+str(j+1)], units[i])
 
     def x0_from_kima(self,posts,binary=True,precessing=False):
         
@@ -99,18 +110,18 @@ class RV_dynmc:
                 x0k.append(float(posts['KO_ecc0'][ind]))
                 for i in range(self.n_orbits-1):
                     x0k.append(float(posts['ecc'+str(i)][ind]))  
-                x0k.append(float(posts['KO_w0'][ind]))
+                x0k.append(float(posts['KO_w0'][ind]) % (2*np.pi) )
                 for i in range(self.n_orbits-1):
-                    x0k.append(float(posts['w'+str(i)][ind]))  
+                    x0k.append(float(posts['w'+str(i)][ind]) % (2*np.pi))  
                 x0k.append(np.random.rand()*2*np.pi)
                 for i in range(self.n_orbits-1):
                     x0k.append(np.random.rand()*2*np.pi)
-                x0k.append(float(posts['KO_phi0'][ind]))
+                x0k.append(float(posts['KO_phi0'][ind]) % (2*np.pi))
                 for i in range(self.n_orbits-1):
-                    x0k.append(float(posts['phi'+str(i)][ind]))  
-                x0k.append(0)
+                    x0k.append(float(posts['phi'+str(i)][ind]) % (2*np.pi))  
+                x0k.append(np.pi/2+np.random.randn()*0.01)
                 for i in range(self.n_orbits-1):
-                    x0k.append(0)  
+                    x0k.append(np.pi/2+np.random.randn()*0.01)  
             else:
                 x0k.append(float(posts['M_pri'][ind])) #may need altering?
                 for i in range(self.n_orbits):
@@ -120,13 +131,13 @@ class RV_dynmc:
                 for i in range(self.n_orbits):
                     x0k.append(float(posts['ecc'+str(i)][ind]))  
                 for i in range(self.n_orbits):
-                    x0k.append(float(posts['w'+str(i)][ind]))  
+                    x0k.append(float(posts['w'+str(i)][ind]) % (2*np.pi))  
                 for i in range(self.n_orbits):
                     x0k.append(np.random.rand()*2*np.pi)
                 for i in range(self.n_orbits):
-                    x0k.append(float(posts['phi'+str(i)][ind]))  
+                    x0k.append(float(posts['phi'+str(i)][ind]) % (2*np.pi))  
                 for i in range(self.n_orbits):
-                    x0k.append(0)  
+                    x0k.append(np.pi/2+np.random.randn()*0.01)  
              
             x0k.append(float(posts['vsys'][ind]))
             for i in range(self.n_lines-1):
@@ -156,11 +167,11 @@ class RV_dynmc:
     
         self.x0 = np.array(mean) + np.random.randn(self.n_chains, self.ndim)*sigma
         
-    def run(self,prior=False):
+    def run(self,prior=True,mult=1):
         
-        sam = self.Sampling.run_emcee(self.n_chains, self.steps, self.x0,prior=prior)
+        self.sam = self.Sampling.run_emcee(self.n_chains, self.n_steps, self.x0,prior=prior,mult=mult)
         
-        self.sample_analysis = Samples_analysis(self.colnames, sam,self.n_chains,self.Sampling)
+        self.sample_analysis = Samples_analysis(self.colnames, self.sam,self.n_chains,self.Sampling)
         
         return self.sample_analysis
 
@@ -171,7 +182,7 @@ class Samples_analysis:
         self.sampler = sampler
         self.n_chains = n_chains
         self.Sampling = Sampling
-        self.samples = self.sampler.get_chains()
+        self.samples = self.sampler.get_chain()
         self.chains = list(np.linspace(0,self.n_chains-1,self.n_chains,dtype=int))
         self.discard=0
         self.thin=1
@@ -191,25 +202,25 @@ class Samples_analysis:
         if thin==None:
             thin = self.thin
         
-        y = self.samples.get_log_prob(discard=discard,thin=thin)
+        y = self.sampler.get_log_prob(discard=discard,thin=thin)
         
         fig = plt.figure(figsize=(12, 6))
         ax = fig.add_subplot(111)
         if evolve:
             ax.plot(y[:,self.chains])
         else:
-            ax.plt(y.T[self.chains])
+            ax.plot(y.T[self.chains])
         
         ax.set_xlabel('Iteration', fontsize=16)
         ax.set_ylabel('logP', fontsize=16)
         
     def choose_random(self):
         
-        sams = self.sampler.get_chains(discard=self.discard,thin=self.thin)
+        sams = self.sampler.get_chain(discard=self.discard,thin=self.thin)
         
         chain = random.sample(self.chains,1)[0]
         
-        sam = random.sample(sams[:,chain,:], 1)[0]
+        sam = random.sample(list(sams[:,chain,:]), 1)[0]
     
         return sam
         
@@ -225,8 +236,9 @@ class Samples_analysis:
         
         sims = []
         for theta in samples:
-            M0,Ms,Ps,es,ws,Ws,fs,incs = self.Sampling.sim_params_from_theta()
+            M0,Ms,Ps,es,ws,Ws,fs,incs = self.Sampling.sim_params_from_theta(theta)
             sim = self.Sampling.sim_setup(M0, Ms, Ps, es, ws, Ws, fs, incs)
             sims.append(sim)
         
         return sims
+    

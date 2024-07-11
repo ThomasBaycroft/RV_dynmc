@@ -48,7 +48,7 @@ class Sampling:
         for i in range(self.n_orbits):
             self.priors.append(prior_uniform('w'+str(i+1),0,2*np.pi))
         for i in range(self.n_orbits):
-            self.priors.append(prior_uniform('W'+str(i+1),-np.pi,np.pi))
+            self.priors.append(prior_uniform('W'+str(i+1),0,2*np.pi))
         for i in range(self.n_orbits):
             self.priors.append(prior_uniform('f'+str(i+1),0,2*np.pi))
         for i in range(self.n_orbits):
@@ -58,7 +58,7 @@ class Sampling:
             for j in range(self.n_lines):
                 self.priors.append(prior_none('vsys'+str(i)+','+str(j)))
             for j in range(self.n_lines):
-                self.priors.append(prior_none('jit'+str(i)+','+str(j)))
+                self.priors.append(prior_loguniform('jit'+str(i)+','+str(j),0.01,1000))
                 
     def define_prior(self,index,name,dist,a=0,b=1):
         
@@ -135,8 +135,8 @@ class Sampling:
             for i,inst in enumerate(self.insts):
                 dat=inst.datas[0]
                 times = dat.times
-                rvs = dat.vrad
-                errs = dat.svrad
+                # rvs = dat.vrad
+                # errs = dat.svrad
                 
                 model_rvs = self.sim_rvs(M0,Ms,Ps,es,ws,Ws,fs,incs,self.t0,times)
                 
@@ -151,7 +151,7 @@ class Sampling:
         
                     # Compute residuals to model
                     res = (rvs - model_rvs[j] - vsys)
-                    
+
                     logL += np.sum(st.norm(scale=np.sqrt(error)).logpdf(res))
         else:
             logL += -np.inf
@@ -182,7 +182,7 @@ class Sampling:
         
         sim.add(m=M0)
         for i,m in enumerate(Ms): 
-            sim.add(m=m,P=Ps[i],e=es[i],omega=ws[i],Omega=Ws[i],f=fs[i],inc=incs[i])
+            sim.add(m=m,P=Ps[i],e=es[i],omega=ws[i],Omega=Ws[i],M=fs[i],inc=incs[i])
         
         sim.move_to_com()
         
@@ -204,20 +204,43 @@ class Sampling:
         return logprior + loglike
         
         
-    def run_emcee(self,chains,steps,x0,prior=False,t0=None):
+    def run_emcee(self,chains,steps,x0,prior=False,t0=None,mult=1):
+        self.x0 = x0
         
         if t0==None:
             self.t0 = self.total_time/self.numtimes
         else:
             self.t0=t0
+        print(self.t0)
             
         if prior:
-            sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_post)
+            self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_post,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)])
+            print('Sampler set-up, priors included')
         else:
-            sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_like)
-        sampler.run_mcmc(x0, nsteps=steps, progress=True)
+            self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_like,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)])
+            print('Sampler set-up, no priors included')
+            
+        try:
+            self.sampler.run_mcmc(self.x0, nsteps=steps, progress=True)
+        except ValueError:
+            print('Initial state has a large condition number, perturbing initalisaition within 1-sigma...')
+            self.perturb_x0(times=mult)
+            try:
+                self.sampler.run_mcmc(self.x0, nsteps=steps, progress=True)
+            except ValueError:
+                print('Initial state still has a large condition number, will now skip initial state check and run anyway.')
+                self.sampler.run_mcmc(self.x0, nsteps=steps, progress=True, skip_initial_state_check=True)
         
-        return sampler
+        return self.sampler
+    
+    def perturb_x0(self,times=1):
+        
+        add = self.x0*0
+        for i in range(len(self.x0.T)):
+            sigma = np.std(self.x0[:,i])
+            add[:,i] = np.random.randn(len(self.x0[:,i]))*sigma
+            
+        self.x0 += add
         
    
 class prior_none:
@@ -238,13 +261,13 @@ class prior_gaussian:
         return st.norm(loc=self.mu, scale=self.sig).logpdf(value)
         
 class prior_uniform:
-    def __init__(self,name,low,high):
+    def __init__(self,name,low,scale):
         self.name = name
         self.low = low
-        self.high = high
+        self.scale = scale
         
     def logp(self,value):
-        return st.uniform(a=self.low, b=self.high).logpdf(value)
+        return st.uniform(loc=self.low, scale=self.scale).logpdf(value)
         
 class prior_loguniform:
     def __init__(self,name,low,high):
@@ -253,7 +276,7 @@ class prior_loguniform:
         self.high = high
         
     def logp(self,value):
-        st.loguniform(a=self.low, b=self.high).logpdf(value)
+        return st.loguniform(a=self.low, b=self.high).logpdf(value)
 
 class instrument:
     
@@ -269,12 +292,13 @@ class instrument:
 class data:
     
     def __init__(self,times,vrad,svrad,units):
+        self.units = units
         
-        if units == 'kms':
-            mult = 1000
+        if self.units == 'kms':
+            self.mult = 1000
         else:
-            mult = 1
+            self.mult = 1
         self.times = np.array(times)
-        self.vrad = np.array(vrad)*mult
-        self.svrad = np.array(svrad)*mult
+        self.vrad = np.array(vrad)*self.mult
+        self.svrad = np.array(svrad)*self.mult
         

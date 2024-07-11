@@ -1,3 +1,9 @@
 Metadata-Version: 2.1
-Name: RV-dynmc
+Name: RV_dynmc
 Version: 0.0.1
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: pandas
+Requires-Dist: emcee
+Requires-Dist: rebound
+Requires-Dist: matplotlib

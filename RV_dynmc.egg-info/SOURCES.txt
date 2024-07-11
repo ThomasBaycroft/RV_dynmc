@@ -5,4 +5,5 @@ RV_dynmc/__init__.py
 RV_dynmc.egg-info/PKG-INFO
 RV_dynmc.egg-info/SOURCES.txt
 RV_dynmc.egg-info/dependency_links.txt
+RV_dynmc.egg-info/requires.txt
 RV_dynmc.egg-info/top_level.txt
