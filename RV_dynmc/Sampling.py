@@ -25,6 +25,7 @@ class Sampling:
         self.numtimes = 0
         self.t0 = 0
         self.priors = []
+        self.extra = False
 
         
     def add_datafile(self,instrument,times,vrad,svrad,units):
@@ -60,7 +61,7 @@ class Sampling:
             for j in range(self.n_lines):
                 self.priors.append(prior_loguniform('jit'+str(i)+','+str(j),0.01,1000))
                 
-    def define_prior(self,index,name,dist,a=0,b=1):
+    def define_prior(self,index,name,dist,a=0,b=1,c=1):
         
         if dist=='none':
             self.priors[index] = prior_none(name)
@@ -70,6 +71,8 @@ class Sampling:
             self.priors[index] = prior_loguniform(name,a,b)
         elif dist in ['Gaussian','gaussian','Normal','normal','N']:
             self.priors[index] = prior_gaussian(name,a,b)
+        elif dist in ['skewGaussian','skewgaussian','SkewGaussian','SkewGaussian','skewNormal','SkewNormal','skewnormal','Skewnormal']:
+            self.priors[index] = prior_skew_gaussian(name,a,b,c)
         else:
             raise ValueError('Prior distribution type not found, use one of: none, uniform, loguniform, gaussian')
                 
@@ -144,7 +147,7 @@ class Sampling:
                     # times = dat.times
                     rvs = dat.vrad
                     errs = dat.svrad
-                    
+                    # print(num_orb_par + num_dat_par*i + j,num_orb_par + num_dat_par*i + self.n_lines + j)
                     vsys,jitter = model_params[num_orb_par + num_dat_par*i + j], model_params[num_orb_par + num_dat_par*i + self.n_lines + j]
                     
                     error = errs**2 + jitter**2
@@ -200,8 +203,19 @@ class Sampling:
         
         logprior = self.log_prior(theta)
         loglike = self.log_like(theta)
+        if self.extra:
+            extra_logProb = self.extra_logP(theta)
+            loglike += extra_logProb
         
         return logprior + loglike
+    
+    def extra_logP(self,theta):
+        logP = self.extra_logFunc(theta)
+        return logP
+
+    def add_extra_logP(self,function):
+        self.extra = True
+        self.extra_logFunc = function
         
         
     def run_emcee(self,chains,steps,x0,prior=False,t0=None,mult=1):
@@ -277,6 +291,16 @@ class prior_loguniform:
         
     def logp(self,value):
         return st.loguniform(a=self.low, b=self.high).logpdf(value)
+    
+class prior_skew_gaussian:
+    def __init__(self,name,loc,scale,skew):
+        self.name = name
+        self.a = skew
+        self.scale = scale
+        self.loc = loc
+    
+    def logp(self,value):
+        return st.skewnorm.logpdf(value,a=self.a,loc=self.loc,scale=self.scale)
 
 class instrument:
     

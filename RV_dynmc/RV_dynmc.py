@@ -64,17 +64,20 @@ class RV_dynmc:
                 
         self.colnames = names
         
-    def define_priors(self,parameters,distributions,par1s,par2s):
-        
+    def define_priors(self,parameters,distributions,par1s,par2s,par3s=None):
+        if par3s == None:
+            par3s = np.zeros(len(par1s))
         self.Sampling.load_default_priors()
         
-        for name,dist,a,b in zip(parameters,distributions,par1s,par2s):
+        for name,dist,a,b,c in zip(parameters,distributions,par1s,par2s,par3s):
             try:
                 ind = self.colnames.index(name)
             except ValueError:
                 raise ValueError('Parameter '+name+' is not valid, you can see the names of the parameters with RV_dynmc.colnames')
-            self.Sampling.define_prior(ind, name, dist,a,b)
+            self.Sampling.define_prior(ind, name, dist,a,b,c)
         
+    def add_extra_logprob(self,function):
+        Sampling.add_extra_logP(function)
         
     def add_rv_data(self,insts,datas,units):
         '''
