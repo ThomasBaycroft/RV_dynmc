@@ -218,7 +218,7 @@ class Sampling:
         self.extra_logFunc = function
         
         
-    def run_emcee(self,chains,steps,x0,prior=False,t0=None,mult=1):
+    def run_emcee(self,chains,steps,x0,prior=False,t0=None,mult=1,backend=None):
         self.x0 = x0
         
         if t0==None:
@@ -228,10 +228,16 @@ class Sampling:
         print(self.t0)
             
         if prior:
-            self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_post,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)])
+            if backend != None:
+                self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_post,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)],backend=backend)
+            else:
+                self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_post,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)])
             print('Sampler set-up, priors included')
         else:
-            self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_like,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)])
+            if backend != None:
+                self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_like,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)],backend=backend)
+            else:
+                self.sampler = emcee.EnsembleSampler(chains, len(x0.T), self.log_like,moves=[(emcee.moves.DEMove(), 0.8),(emcee.moves.DESnookerMove(), 0.2)])
             print('Sampler set-up, no priors included')
             
         try:

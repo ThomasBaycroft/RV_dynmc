@@ -170,9 +170,9 @@ class RV_dynmc:
     
         self.x0 = np.array(mean) + np.random.randn(self.n_chains, self.ndim)*sigma
         
-    def run(self,prior=True,mult=1):
+    def run(self,prior=True,mult=1,backend=None):
         
-        self.sam = self.Sampling.run_emcee(self.n_chains, self.n_steps, self.x0,prior=prior,mult=mult)
+        self.sam = self.Sampling.run_emcee(self.n_chains, self.n_steps, self.x0,prior=prior,mult=mult,backend=backend)
         
         self.sample_analysis = Samples_analysis(self.colnames, self.sam,self.n_chains,self.Sampling)
         
