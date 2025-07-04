@@ -135,13 +135,16 @@ class Sampling:
         #         physical = False
                 
         if physical:
+
+            sim = self.sim_setup(M0,Ms,Ps,es,ws,Ws,fs,incs)
+
             for i,inst in enumerate(self.insts):
                 dat=inst.datas[0]
                 times = dat.times
                 # rvs = dat.vrad
                 # errs = dat.svrad
                 
-                model_rvs = self.sim_rvs(M0,Ms,Ps,es,ws,Ws,fs,incs,self.t0,times)
+                model_rvs = self.sim_rvs(sim,self.t0,times)
                 
                 for j,dat in enumerate(inst.datas):
                     # times = dat.times
@@ -156,14 +159,19 @@ class Sampling:
                     res = (rvs - model_rvs[j] - vsys)
 
                     logL += np.sum(st.norm(scale=np.sqrt(error)).logpdf(res))
+            
+            if self.extra:
+                extra_logProb = self.extra_logP(sim,self.t0)
+                logL += extra_logProb
+
         else:
             logL += -np.inf
+
+        
     
         return logL
         
-    def sim_rvs(self,M0,Ms,Ps,es,ws,Ws,fs,incs,t0,times,body=0):
-        
-        sim = self.sim_setup(M0,Ms,Ps,es,ws,Ws,fs,incs)
+    def sim_rvs(self,sim,t0,times,body=0):
         
         Time = times - t0
         
@@ -203,14 +211,11 @@ class Sampling:
         
         logprior = self.log_prior(theta)
         loglike = self.log_like(theta)
-        if self.extra:
-            extra_logProb = self.extra_logP(theta)
-            loglike += extra_logProb
         
         return logprior + loglike
     
-    def extra_logP(self,theta):
-        logP = self.extra_logFunc(theta)
+    def extra_logP(self,sim,t0):
+        logP = self.extra_logFunc(sim,t0)
         return logP
 
     def add_extra_logP(self,function):
