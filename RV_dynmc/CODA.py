@@ -1,4 +1,4 @@
-from . import Data, RV_Data, Phot_Data, Gaia_epoch_Data
+from . import Data, RV_Data, Phot_Data, ETV_Data, Gaia_epoch_Data
 
 class CODA:
     '''
@@ -14,9 +14,12 @@ class CODA:
     def __init__(self):
         pass
 
-    def add_body(self, type, parent_id=None):
+    def add_body(self, type, parent_id=None, radius=None):
         '''
-        Set the structure of the system by adding bodies.
+        Set the structure of the system by adding bodies. `radius` is
+        optional (e.g. not needed for a pure-RV/astrometry body with no
+        eclipses) but is required for any body involved in ETV data, since
+        eclipse contact-point timing needs R_a + R_b.
         '''
         id = len(self.bodies_ids)
         self.bodies_ids.append(id)
@@ -33,6 +36,7 @@ class CODA:
             body = Black_hole(id, parent)
         else:
             raise ValueError('Invalid body type')
+        body.radius = radius
         self.bodies.append(body)
 
     def choose_sampler(self,algorithm, **kwargs):
@@ -55,6 +59,25 @@ class CODA:
         data.load_data(datafile)
         self.datas.append(data)
 
+    def add_etv_data(self, datafile, body_a_id, body_b_id, window_half_width,
+                      front_body_id=None):
+        '''
+        add an eclipse-timing (ETV) datafile for the pair (body_a, body_b)
+        to the list of data. `window_half_width` sets how far either side
+        of each observed epoch the Nbody code scans to bracket the true
+        eclipse time. `front_body_id`, if given, selects which of the two
+        bodies is expected to be nearer the observer (smaller z) during
+        these eclipses -- e.g. pass the secondary star's id for a primary
+        eclipse dataset -- so that only the matching conjunction is found
+        even if body_a/body_b also eclipse each other the other way round
+        half an orbit later. Leave as None to accept either.
+        '''
+        front_body = self.bodies[front_body_id] if front_body_id is not None else None
+        data = ETV_Data(self.bodies[body_a_id], self.bodies[body_b_id],
+                         window_half_width, front_body=front_body)
+        data.load_data(datafile)
+        self.datas.append(data)
+
 
 
 
@@ -71,6 +94,7 @@ class Celestial_body:
 
     def __init__(self, id):
         self.id = id
+        self.radius = None
 
     def get_parameter(self,sim,parameter):
         pass
