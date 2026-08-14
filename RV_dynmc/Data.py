@@ -9,15 +9,29 @@ class Data:
         pass
 
     def load_data(self,datafile):
+        '''
+        read in the datafile storing values
+        '''
         pass
 
-    def read_sim_params(self, sim):
+    def obtain_sim_outputs(self, outputs):
+        '''
+        Function run by the nbody code when it reaches the relevant timestep it adds 
+        the relevant outputs to this class
+        '''
         pass
 
     def calc_diffs(self):
+        '''
+        Use the simulation outputs as have been fed in by the nbody to calculate the simulated dataset
+        Calculate the differences between simulated and observed data
+        '''
         pass
 
     def likelihood(self):
+        '''
+        Calculate likelihood based on diffs
+        '''
         pass
 
 class RV_Data(Data):
@@ -27,6 +41,11 @@ class RV_Data(Data):
         self.body = body
 
 class Phot_Data(Data):
+
+    def __init__(self):
+        super().__init__()
+
+class ETV_Data(Data):
 
     def __init__(self):
         super().__init__()

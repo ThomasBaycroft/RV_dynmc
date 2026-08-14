@@ -8,6 +8,11 @@ class CODA:
     bodies = []
     bodies_ids =[]
     datas = []
+    sampler = None
+    integrator = None
+
+    def __init__(self):
+        pass
 
     def add_body(self, type, parent_id=None):
         '''
@@ -30,13 +35,25 @@ class CODA:
             raise ValueError('Invalid body type')
         self.bodies.append(body)
 
+    def choose_sampler(self,algorithm, **kwargs):
+        '''
+        Choose which sampling algorithm to use, add extra arguments to give to the sampler
+        '''
+        pass
+
+    def choose_integrator(self,integrator, **kwargs):
+        '''
+        Choose which Nbodyintegrator to use and give any specific arguments required
+        '''
+        pass
+
     def add_rv_data(self, datafile, body_id):
+        '''
+        add a radial velocity datafile to the list of data
+        '''
         data = RV_Data(self.bodies[body_id])
         data.load_data(datafile)
         self.datas.append(data)
-
-
-
 
 
 
