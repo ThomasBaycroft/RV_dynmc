@@ -78,6 +78,12 @@ class CODA:
         data.load_data(datafile)
         self.datas.append(data)
 
+    def setup(self):
+        #decide reference time
+        #setup theta order
+        #print/write a setupfile summary?
+        pass
+
 
 
 
