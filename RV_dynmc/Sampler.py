@@ -58,7 +58,26 @@ class Sampler:
         loglike = self.log_likelihood(params)
         return logprior + loglike
 
-class prior_none:
+class Dynesty_sampler(Sampler):
+
+    def __init__(self, nbody, registry):
+        super().__init__(nbody, registry)
+
+    def prior_transform(self,u):
+        return np.array([prior.cdf_inv(value) for prior, value in zip(self.registry.priors, u)])
+
+    def setup_sampler(self,**kwargs):
+        from dynesty import NestedSampler
+
+        self.ndim = self.registry.nfree
+        self.sampler = NestedSampler(self.log_likelihood,self.prior_transform,self.ndim,**kwargs)
+
+    def run_sampler(self,**kwargs):
+        self.sampler.run_nested(**kwargs)
+        
+
+
+class prior_none: ##Needed????
     '''
     An improper/unbounded ("flat") prior: logp is 0 everywhere. Has no
     natural initial draw -- rvs() raises, so ParameterRegistry.build_params
@@ -77,43 +96,63 @@ class prior_none:
             f"natural initial draw -- supply an explicit starting value for this "
             f"parameter via p0 in ParameterRegistry.build_params()."
         )
-   
+
+
+#Various priors avaialable, each has:
+# logp: calculates log_pdf of the prior at the given value
+# cdf_inv: calculates the inverse cumulative distribution function of the prior at the given value
+# rvs: samples from the prior with size: size
 class prior_gaussian:
     def __init__(self,name,mu,sig):
         self.name = name
         self.mu = mu
         self.sig = sig
+
+        self.distribution = st.norm(loc=self.mu, scale=self.sig)
         
     def logp(self,value):
-        
-        return st.norm(loc=self.mu, scale=self.sig).logpdf(value)
+        return self.distribution.logpdf(value)
 
-    def rvs(self):
-        return st.norm(loc=self.mu, scale=self.sig).rvs()
+    def cdf_inv(self,value):
+        return self.distribution.ppf(value)
+
+    def rvs(self,size=1):
+        return self.distribution.rvs(size)
         
 class prior_uniform:
-    def __init__(self,name,low,scale):
+    def __init__(self,name,low,high):
         self.name = name
         self.low = low
-        self.scale = scale
+        self.high = high
+        self.scale = self.high - self.low
+
+        self.distribution = st.uniform(loc=self.low, scale=self.scale)
         
     def logp(self,value):
-        return st.uniform(loc=self.low, scale=self.scale).logpdf(value)
+        return self.distribution.logpdf(value)
 
-    def rvs(self):
-        return st.uniform(loc=self.low, scale=self.scale).rvs()
+    def cdf_inv(self,value):
+        return value*self.scale + self.low
+
+    def rvs(self,size=1):
+        return self.distribution.rvs(size)
         
 class prior_loguniform:
     def __init__(self,name,low,high):
         self.name = name
         self.low = low
         self.high = high
+
+        self.distribution = st.loguniform(a=self.low, b=self.high)
         
     def logp(self,value):
-        return st.loguniform(a=self.low, b=self.high).logpdf(value)
+        return self.distribution.logpdf(value)
 
-    def rvs(self):
-        return st.loguniform(a=self.low, b=self.high).rvs()
+    def cdf_inv(self,value):
+        return self.distribution.ppf(value)
+
+    def rvs(self,size=1):
+        return self.distribution.rvs(size)
     
 class prior_skew_gaussian:
     def __init__(self,name,loc,scale,skew):
@@ -121,9 +160,31 @@ class prior_skew_gaussian:
         self.a = skew
         self.scale = scale
         self.loc = loc
+
+        self.distribution = st.skewnorm(a=self.a,loc=self.loc,scale=self.scale)
     
     def logp(self,value):
-        return st.skewnorm.logpdf(value,a=self.a,loc=self.loc,scale=self.scale)
+        return self.distribution.logpdf(value)
 
-    def rvs(self):
-        return st.skewnorm.rvs(a=self.a,loc=self.loc,scale=self.scale)
+    def cdf_inv(self,value):
+        return self.distribution.ppf(value)
+
+    def rvs(self,size=1):
+        return self.distribution.rvs(size)
+
+class prior_beta:
+    def __init__(self,name,a,b):
+        self.name = name
+        self.a = a
+        self.b = b
+
+        self.distribution = st.beta(a=self.a, b=self.b)
+
+    def logp(self,value):
+        return self.distribution.logpdf(value)
+    
+    def cdf_inv(self,value):
+        return self.distribution.ppf(value)
+
+    def rvs(self,size=1):
+        return self.distribution.rvs(size)

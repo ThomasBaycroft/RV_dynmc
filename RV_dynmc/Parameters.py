@@ -38,6 +38,7 @@ class ParameterRegistry:
         self.priors = []    # prior objects, in params-index order
         self.n_free = 0
 
+
     def set_free(self, owner, param, prior):
         '''
         Register (owner, param) as free: it occupies the next slot in the
