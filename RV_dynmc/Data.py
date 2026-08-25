@@ -9,11 +9,13 @@ class Data:
     and calculate the model to compare with the data through a likelihood.
     '''
 
-    def __init__(self):
+    def __init__(self, registry):
         self.times = None
         self.model_vals = np.array([])
         self.observed_vals = np.array([])
         self.errors = np.array([])
+
+        self.registry = registry
 
     def load_data(self,datafile):
         '''
@@ -46,16 +48,25 @@ class Data:
         '''
         pass
 
-    def log_likelihood(self,distribution='Gaussian'):
+    def log_likelihood(self, params, distribution='Gaussian'):
         '''
         Calculate likelihood based on diffs
         '''
+        self.calc_diffs(params)
+
         res = self.observed_vals - self.model_vals
         if distribution == 'Gaussian':
             logL = np.sum(st.norm(scale=self.errors).logpdf(res))
         else:
             raise NotImplementedError(f'Likelihood using a {distribution} function is not available')
         return logL
+
+    def get_parameter(self, param, params, registry, cache=None):
+        '''
+        Look up this dataset's value for `param` (e.g. 'jitter', 'vsys', 'nu', ...)
+        from `registry`, given the current flat `params` vector.
+        '''
+        return registry.resolve(self, param, params, cache)
 
 class RV_Data(Data):
 
@@ -81,7 +92,12 @@ class RV_Data(Data):
 
         self.model_rvs = np.zeros_like(self.vrad)
 
-    def calc_diffs(self):
+    def calc_diffs(self,params):
+        cache = {}
+        if self.registry.is_registered(self,'jitter'):
+            self.Jitter = self.registry.resolve(self, 'jitter', params, cache)
+        self.vsys = self.registry.resolve(self, 'vsys', params, cache)
+
         self.errors = np.hypot(self.svrad,self.Jitter)
         self.model_vals = self.model_rvs + self.vsys
 
@@ -176,7 +192,11 @@ class ETV_Data(Data):
             self.model_ingress_times[index] = contact_times[0] if len(contact_times) >= 2 else np.nan
             self.model_egress_times[index] = contact_times[1] if len(contact_times) >= 2 else np.nan
 
-    def calc_diffs(self):
+    def calc_diffs(self,params):
+        cache = {}
+        if self.registry.is_registered(self,'jitter'):
+            self.Jitter = self.registry.resolve(self, 'jitter', params, cache)
+
         if self.contacts:
             self.model_vals = np.c_[self.model_mid_times,self.model_ingress_times,self.model_egress_times]
             self.errors = np.hypot(np.c_[self.mt_errs,self.it_errs,self.et_errs],self.Jitter)

@@ -1,18 +1,18 @@
 from . import Data, RV_Data, Phot_Data, ETV_Data, Gaia_epoch_Data
+from .Parameters import ParameterRegistry
 
 class CODA:
     '''
     General top-level class of CODA which the user interfaces with mostly.
     '''
 
-    bodies = []
-    bodies_ids =[]
-    datas = []
-    sampler = None
-    integrator = None
-
     def __init__(self):
-        pass
+        self.bodies = []
+        self.bodies_ids = []
+        self.datas = []
+        self.sampler = None
+        self.integrator = None
+        self.registry = ParameterRegistry()
 
     def add_body(self, type, parent_id=None, radius=None):
         '''
@@ -38,6 +38,36 @@ class CODA:
             raise ValueError('Invalid body type')
         body.radius = radius
         self.bodies.append(body)
+
+    def set_free(self, owner, param, prior):
+        '''
+        Register `param` on `owner` (a body or a Data instance) as a free
+        parameter with the given prior -- see ParameterRegistry.set_free.
+        '''
+        return self.registry.set_free(owner, param, prior)
+
+    def set_fixed(self, owner, param, value):
+        '''
+        Register `param` on `owner` as fixed at a constant value -- see
+        ParameterRegistry.set_fixed.
+        '''
+        self.registry.set_fixed(owner, param, value)
+
+    def set_derived(self, owner, param, depends_on, func):
+        '''
+        Register `param` on `owner` as computed from other registered
+        parameters rather than sampled directly -- see
+        ParameterRegistry.set_derived. Typical use: a body's mass computed
+        as a mass ratio times another body's mass.
+        '''
+        self.registry.set_derived(owner, param, depends_on, func)
+
+    def build_params(self, p0=None):
+        '''
+        Build an initial flat parameter vector from every registered free
+        parameter -- see ParameterRegistry.build_params.
+        '''
+        return self.registry.build_params(p0)
 
     def choose_sampler(self,algorithm, **kwargs):
         '''
@@ -80,11 +110,9 @@ class CODA:
 
     def setup(self):
         #decide reference time
-        #setup theta order
+        #params order is now handled by self.registry (see set_free/set_fixed/set_derived/build_params)
         #print/write a setupfile summary?
         pass
-
-
 
 
 
@@ -102,8 +130,16 @@ class Celestial_body:
         self.id = id
         self.radius = None
 
-    def get_parameter(self,sim,parameter):
-        pass
+    def get_parameter(self, param, params, registry, cache=None):
+        '''
+        Look up this body's value for `param` (e.g. 'mass', 'period',
+        'eccentricity', 'inclination', 'Omega', 'omega', 'true_longitude',
+        'radius') from `registry`, given the current flat `params` vector.
+        Thin convenience wrapper around registry.resolve() -- this body
+        doesn't need to know or care whether `param` is free, fixed, or
+        derived; the registry handles that.
+        '''
+        return registry.resolve(self, param, params, cache)
 
 class Star(Celestial_body):
 

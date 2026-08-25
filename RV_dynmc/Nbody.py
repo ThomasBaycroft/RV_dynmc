@@ -101,10 +101,10 @@ class Nbody:
     # ------------------------------------------------------------------
     # Backend hooks -- must be implemented by a child class
     # ------------------------------------------------------------------
-    def setup_simulation(self, theta):
+    def setup_simulation(self, params):
         '''
-        Build and return a fresh simulation object for parameter vector
-        `theta`, using self.bodies and self.integrator_kwargs.
+        Build and return a fresh simulation object for the flat parameter
+        vector `params`, using self.bodies and self.integrator_kwargs.
         '''
         raise NotImplementedError('setup_simulation must be implemented by an Nbody backend subclass')
 
@@ -237,14 +237,14 @@ class Nbody:
     # ------------------------------------------------------------------
     # Main integration pass (backend-agnostic)
     # ------------------------------------------------------------------
-    def integrate(self, theta):
+    def integrate(self, params):
         '''
         Perform the integration: step through the merged, time-ordered
         event sequence exactly once, in increasing time order. Direct
         output events dispatch straight to outputs(); ETV window events
         trigger a bracket scan followed by root refinement.
         '''
-        sim = self.setup_simulation(theta)
+        sim = self.setup_simulation(params)
         events = self.build_event_sequence()
 
         for event in events:
@@ -383,16 +383,40 @@ class Nbody_rebound(Nbody):
     root-finding logic is inherited unchanged.
     '''
 
-    def __init__(self, bodies, datas, integrator='ias15', **integrator_kwargs):
+    # word-named orbital elements every non-reference body needs, mapped to
+    # rebound's own (short, historical) sim.add() kwarg names. 'true_longitude'
+    # is deliberately not called 'theta' anywhere in our own vocabulary --
+    # only rebound's kwarg is spelled that way, right at the point of use.
+    ORBITAL_PARAMS = ('period', 'eccentricity', 'inclination', 'Omega', 'omega', 'true_longitude')
+    REBOUND_KWARG = {
+        'period': 'P',
+        'eccentricity': 'e',
+        'inclination': 'inc',
+        'Omega': 'Omega',
+        'omega': 'omega',
+        'true_longitude': 'theta',
+    }
+
+    def __init__(self, bodies, datas, registry, integrator='ias15', **integrator_kwargs):
         super().__init__(bodies, datas, **integrator_kwargs)
         self.integrator = integrator
+        self.registry = registry
 
-    def setup_simulation(self, theta):
+    def setup_simulation(self, params):
         '''
-        Build a fresh rebound.Simulation for parameter vector `theta`.
-        Converting body orbital elements/masses (from `theta`) into
-        sim.add(...) calls is left for the body classes / later work; only
-        the integrator setup is handled here.
+        Build a fresh rebound.Simulation for the flat parameter vector
+        `params`, using self.registry to resolve every body's mass and
+        (for every body but the first) orbital elements -- free, fixed,
+        or derived, all handled uniformly by registry.resolve(); this
+        method never needs to know which mode any given parameter is in.
+
+        Bodies are added in self.bodies order, which must already respect
+        the hierarchy: a body's parent (either 'COM', meaning the Jacobi
+        centre-of-mass of every body added before it, or a specific
+        earlier body) must already exist in the simulation. This is the
+        same ordering constraint that lets 'derived' parameters (e.g. a
+        mass computed from a mass ratio) resolve correctly -- see
+        ParameterRegistry.
         '''
         import rebound
 
@@ -406,9 +430,26 @@ class Nbody_rebound(Nbody):
             else:
                 setattr(sim, key, value)
 
-        # TODO: populate the simulation from theta, e.g.
-        # for body in self.bodies:
-        #     sim.add(**body.get_parameter(theta, 'rebound_kwargs'))
+        cache = {}  # fresh every call -- params differs every time, see ParameterRegistry.resolve
+        for i, body in enumerate(self.bodies):
+            mass = self.registry.resolve(body, 'mass', params, cache)
+
+            if i == 0:
+                # first body added defines the simulation's rest frame;
+                # nothing to orbit yet
+                sim.add(m=mass)
+                continue
+
+            if body.parent == 'COM' or body.parent is None:
+                primary = None  # rebound default: Jacobi coords of everything added so far
+            else:
+                primary = sim.particles[body.parent.id]
+
+            orbit_kwargs = {
+                self.REBOUND_KWARG[param]: self.registry.resolve(body, param, params, cache)
+                for param in self.ORBITAL_PARAMS
+            }
+            sim.add(m=mass, primary=primary, **orbit_kwargs)
 
         self.sim = sim
         return sim
