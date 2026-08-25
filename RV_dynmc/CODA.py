@@ -1,5 +1,7 @@
 from . import Data, RV_Data, Phot_Data, ETV_Data, Gaia_epoch_Data
 from .Parameters import ParameterRegistry
+from .Nbody import Nbody_rebound
+from .Sampler import Sampler
 
 class CODA:
     '''
@@ -69,23 +71,43 @@ class CODA:
         '''
         return self.registry.build_params(p0)
 
-    def choose_sampler(self,algorithm, **kwargs):
-        '''
-        Choose which sampling algorithm to use, add extra arguments to give to the sampler
-        '''
-        pass
-
     def choose_integrator(self,integrator, **kwargs):
         '''
-        Choose which Nbodyintegrator to use and give any specific arguments required
+        Choose which Nbody backend to use and give any backend-specific
+        arguments required. Currently only 'rebound' is supported. Note:
+        this `integrator` argument selects the *backend* (rebound vs. a
+        future alternative); the specific numerical scheme within rebound
+        (e.g. 'ias15', 'whfast') is a separate kwarg forwarded to
+        Nbody_rebound -- e.g. choose_integrator('rebound', integrator='whfast').
         '''
-        pass
+        if integrator == 'rebound':
+            self.integrator = Nbody_rebound(self.bodies, self.datas, self.registry, **kwargs)
+        else:
+            raise NotImplementedError(
+                f"Nbody backend {integrator!r} is not supported yet -- only "
+                f"'rebound' is currently implemented."
+            )
+
+    def choose_sampler(self,algorithm='base', **kwargs):
+        '''
+        Choose which sampling algorithm to use, add extra arguments to give
+        to the sampler. 'base' gives a plain Sampler exposing
+        log_prior/log_likelihood/log_posterior -- useful for manual
+        testing, or for driving an external sampler by hand. Algorithm-
+        specific subclasses (dynesty, emcee, ...) will be added later.
+        '''
+        if self.integrator is None:
+            raise RuntimeError('choose_integrator(...) must be called before choose_sampler(...)')
+        if algorithm == 'base':
+            self.sampler = Sampler(self.integrator, self.registry, **kwargs)
+        else:
+            raise NotImplementedError(f"Sampler algorithm {algorithm!r} is not implemented yet.")
 
     def add_rv_data(self, datafile, body_id):
         '''
         add a radial velocity datafile to the list of data
         '''
-        data = RV_Data(self.bodies[body_id])
+        data = RV_Data(self.bodies[body_id], self.registry)
         data.load_data(datafile)
         self.datas.append(data)
 
@@ -104,7 +126,7 @@ class CODA:
         '''
         front_body = self.bodies[front_body_id] if front_body_id is not None else None
         data = ETV_Data(self.bodies[body_a_id], self.bodies[body_b_id],
-                         window_half_width, front_body=front_body)
+                         window_half_width, self.registry, front_body=front_body)
         data.load_data(datafile)
         self.datas.append(data)
 

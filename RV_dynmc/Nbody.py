@@ -550,8 +550,25 @@ class Nbody_rebound(Nbody):
             state['contact'] = contact_indicator
             state['deriv'] = dsep_dt
 
-        sim.heartbeat = heartbeat
-        sim.integrate(t_end, exact_finish_time=1)
-        sim.heartbeat = None
+        # NOTE: rebound (as of at least 5.1.1) has a bug in the high-level
+        # `sim.heartbeat = heartbeat` property setter -- it tries to cache
+        # the callback in `self._hb`, which is not a valid Simulation slot
+        # in this version, and raises AttributeError. We set the real
+        # underlying ctypes struct field (`_heartbeat`) directly instead.
+        # `callback` must stay alive as a genuine Python reference for the
+        # whole `sim.integrate()` call, since the C side only holds a raw
+        # function pointer into it -- letting it get garbage-collected
+        # mid-integration would be a use-after-free. It's cleared back to a
+        # NULL function pointer afterwards so this window's callback can't
+        # linger and fire on later, unrelated integrate() calls on `sim`.
+        from ctypes import CFUNCTYPE, POINTER
+        import rebound
+        AFF = CFUNCTYPE(None, POINTER(rebound.Simulation))
+        callback = AFF(heartbeat)
+        sim._heartbeat = callback
+        try:
+            sim.integrate(t_end, exact_finish_time=1)
+        finally:
+            sim._heartbeat = AFF(0)
 
         return {'contact': contact_brackets, 'extremum': extremum_brackets}

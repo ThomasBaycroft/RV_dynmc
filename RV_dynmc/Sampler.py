@@ -1,33 +1,62 @@
+import warnings
+import numpy as np
 import scipy.stats as st
 
 class Sampler:
     '''
-    Runs the Bayesian sampling (MCMC, nested, etc)
+    Runs the Bayesian sampling (MCMC, nested, etc). This base class is
+    algorithm-agnostic: it just exposes log_prior/log_likelihood/
+    log_posterior for `params`, suitable for driving by hand or handing to
+    an external sampler. Algorithm-specific subclasses (dynesty, emcee,
+    ...) will wrap this with the sampler-specific setup/run machinery.
     '''
 
-    def __init__(self):
-        pass
+    def __init__(self, nbody, registry):
+        self.nbody = nbody
+        self.registry = registry
 
     def log_prior(self,params):
         '''
-        calculate log prior probability based on the defined priors and proposed parameters
+        Sum the log-prior density of every free parameter at its current
+        value in `params`. self.registry.priors is already ordered to
+        match `params`' indices (see ParameterRegistry.set_free), so this
+        is a direct zip rather than a lookup per parameter.
         '''
-        pass
+        return float(sum(prior.logp(value) for prior, value in zip(self.registry.priors, params)))
 
     def log_likelihood(self,params):
         '''
-        Calculate log likelihood by running Nbody which gives outputs to each dataset each of which has its own likelihood
+        Run the Nbody integration for `params` (which writes outputs into
+        every dataset via obtain_sim_outputs), then sum each dataset's own
+        log_likelihood(params).
         '''
-        pass
+        try:
+            self.nbody.integrate(params)
+        except Exception as e:
+            warnings.warn(
+                f'Nbody integration failed for this parameter draw ({e!r}); '
+                f'treating as zero probability (logL = -inf).'
+            )
+            return -np.inf
+
+        logL = 0.0
+        for data in self.nbody.datas:
+            logL += data.log_likelihood(params)
+        return logL
 
     def log_posterior(self, params):
-
+        '''
+        log_prior + log_likelihood, skipping the (expensive) Nbody
+        integration entirely whenever the prior alone already rules
+        `params` out -- e.g. a proposed value outside a uniform prior's
+        bounds.
+        '''
         logprior = self.log_prior(params)
-        loglike = self.log_like(params)
-                
+        if not np.isfinite(logprior):
+            return -np.inf
+
+        loglike = self.log_likelihood(params)
         return logprior + loglike
-
-
 
 class prior_none:
     '''

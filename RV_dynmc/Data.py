@@ -61,17 +61,17 @@ class Data:
             raise NotImplementedError(f'Likelihood using a {distribution} function is not available')
         return logL
 
-    def get_parameter(self, param, params, registry, cache=None):
+    def get_parameter(self, param, params, cache=None):
         '''
-        Look up this dataset's value for `param` (e.g. 'jitter', 'vsys', 'nu', ...)
-        from `registry`, given the current flat `params` vector.
+        Look up this dataset's value for `param` (e.g. 'jitter', 'vsys', ...)
+        from self.registry, given the current flat `params` vector.
         '''
-        return registry.resolve(self, param, params, cache)
+        return self.registry.resolve(self, param, params, cache)
 
 class RV_Data(Data):
 
-    def __init__(self, body, datafile=None,header=0,skiprows=[1],sep='\t',units='kms'):
-        super().__init__()
+    def __init__(self, body, registry, datafile=None,header=0,skiprows=[1],sep='\t',units='kms'):
+        super().__init__(registry)
         self.body = body
         self.datatype = 'RV'
         if datafile is not None:
@@ -107,8 +107,8 @@ class RV_Data(Data):
 
 class Phot_Data(Data):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, registry):
+        super().__init__(registry)
 
 class ETV_Data(Data):
     '''
@@ -119,8 +119,8 @@ class ETV_Data(Data):
     root(s), and refines those roots with safeguarded Newton's method.
     '''
 
-    def __init__(self, body_a, body_b, window_half_width, front_body=None, datafile=None, contacts=False, header=0, skiprows=[1], sep='\t', units='days'):
-        super().__init__()
+    def __init__(self, body_a, body_b, window_half_width, registry, front_body=None, datafile=None, contacts=False, header=0, skiprows=[1], sep='\t', units='days'):
+        super().__init__(registry)
         self.datatype = 'ETV'
         self.body_a = body_a
         self.body_b = body_b
@@ -204,10 +204,16 @@ class ETV_Data(Data):
             self.model_vals = self.model_mid_times
             self.errors = np.hypot(self.mt_errs,self.Jitter)
 
-    def log_likelihood(self,distribution='Gaussian'):
+    def log_likelihood(self,params,distribution='Gaussian'):
         '''
-        Calculate likelihood based on diffs
+        Calculate likelihood based on diffs. Matches the base Data
+        signature (params first) so a generic caller -- e.g. Sampler --
+        can call data.log_likelihood(params) uniformly across every
+        dataset type; unlike the base class this overrides the NaN
+        (non-eclipsing trial configuration) handling.
         '''
+        self.calc_diffs(params)
+
         res = self.observed_vals - self.model_vals
         if distribution == 'Gaussian':
             logLs = st.norm(scale=self.errors).logpdf(res)
@@ -219,10 +225,10 @@ class ETV_Data(Data):
 
 class Gaia_epoch_Data(Data):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, registry):
+        super().__init__(registry)
 
 class Gaia_auxiliary_Data(Data):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, registry):
+        super().__init__(registry)
