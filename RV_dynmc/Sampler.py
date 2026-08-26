@@ -58,6 +58,14 @@ class Sampler:
         loglike = self.log_likelihood(params)
         return logprior + loglike
 
+    def setup_sampler(self):
+        #Need to implement in child classes
+        pass
+    
+    def run_sampler(self):
+        #Need to implement in child classes
+        pass
+
 class Dynesty_sampler(Sampler):
 
     def __init__(self, nbody, registry):
@@ -74,8 +82,30 @@ class Dynesty_sampler(Sampler):
 
     def run_sampler(self,**kwargs):
         self.sampler.run_nested(**kwargs)
-        
 
+class Emcee_sampler(Sampler):
+
+    def __init__(self, nbody, registry):
+        super().__init__(nbody, registry)
+
+    def setup_sampler(self,nchains=None,**kwargs):
+        import emcee
+        self.ndim = self.registry.nfree
+
+        if nchains == None:
+            self.nchains = self.ndim * 6
+            print('nchains undefined, defaulting to 6x the number of dimensions')
+        else:
+            self.nchains = nchains
+        self.sampler = emcee.EnsembleSampler(self.nchains, self.ndim, self.log_posterior,**kwargs)
+
+        x0_dim = self.nchains
+        self.x0 = np.array([prior.rvs(x0_dim) for prior in self.registry.priors]).T
+
+    def run_sampler(self,nsteps,**kwargs):
+        self.nsteps = nsteps
+        self.sampler.run_mcmc(self.x0, nsteps=self.nsteps, **kwargs)
+        
 
 class prior_none: ##Needed????
     '''
